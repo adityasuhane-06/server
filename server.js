@@ -129,7 +129,9 @@ server.post('/api/signup', (req, res) => {
     });
 
 });
-
+server.get("/",(req,res)=>{
+    res.send("Welcome to the server");
+});
 
 server.post("/api/login",(req,res)=>{
      console.log(req.body);
