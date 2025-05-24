@@ -1,0 +1,6 @@
+.env
+serviceAccountKey.json
+requests.rest
+test-file.pptx
+test-image-jpg
+node_modules
