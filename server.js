@@ -189,10 +189,12 @@ server.post("/api/google-login",async(req,res)=>{
         console.log("decoded user",decodedUser);
            let {email,name,picture}=decodedUser;
            picture=picture.replace("s96-c","s384-c");
-           let user=await User.findOne({'personal_info.email':email}).then((user)=>{
+           let user=await User.findOne({'personal_info.email':email})
             console.log(user);
             if(!user){
-                let username=generateUserName(email);
+                let username=await generateUserName(email);
+                
+console.log("username",username);
                 user=new User({
                     personal_info:{
                         fullname:name,
@@ -206,13 +208,11 @@ server.post("/api/google-login",async(req,res)=>{
                     
                 })
                 // save the user to the database
+                console.log("user",user);
                 user.save().then((u)=>{
                     return res.status(200).json(formatData(u));
-                }).catch((err)=>{
-                    if(err.code == 11000){
-                        return res.status(403).json({"error":"Email already exists",message:err.message});
-                    }
                 })
+                
 
             }
             else{
@@ -220,14 +220,11 @@ server.post("/api/google-login",async(req,res)=>{
                 return res.status(200).json(formatData(user));
             }
 
-    }).catch((err)=>{
-        console.log(err);
-        return res.status(500).json({"error":"Internal server error"});
     }
 )
 
 })
-})
+
 
 
 const accountName = process.env.ACCOUNT_NAME;
