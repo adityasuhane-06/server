@@ -31,7 +31,8 @@ admin.initializeApp({
 // now we can use admin to access firebase services
 
 let emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-let passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+let passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+
 mongoose.connect(process.env.DATABASE_LOCATION,{
     autoIndex:true,
 })
