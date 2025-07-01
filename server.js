@@ -3,14 +3,14 @@ import bcrypt from "bcrypt"
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import User from './Schema/User.js';
+import Blog from './Schema/Blog.js';
+
 import { nanoid } from 'nanoid';
-import jwt from 'jsonwebtoken';
+import jwt  from 'jsonwebtoken';
 import cors from 'cors';
 import admin from "firebase-admin";
 import { getAuth } from 'firebase-admin/auth';
-import Blog from './Schema/Blog.js';
 import { BlobServiceClient } from "@azure/storage-blob";
-
 
 dotenv.config();
 const  server =express();
@@ -56,11 +56,40 @@ const generateUserName=async(email)=>{
     return username;
 }
 
+const verifyJWT = (req, res, next) => {
+    // next this will be called if the token is valid then only the user can access the protected route
+    const authHeader = req.headers['authorization'];
+    console.log(authHeader)
+    const token  =authHeader&&authHeader.split(" ")[1];
+    console.log(token)
+    if(token===null||token===undefined){
+        return res.status(401).json({error:"No access token"})
+    }
+    jwt.verify(token,process.env.JWT_SECRETKEY,(err,user)=>{
+        /* 1. If verification fails (e.g., invalid signature, expired token), err is set, and user is undefined.
+           2. If verification succeeds, user contains the decoded payload (e.g., { id: "12345" }).
+           3. The comment notes that user is an object containing the id from the      original token’s payload.
+            */
+        if(err){
+            return res.status(403).json({error:"Invalid access token"});
+        }
+        req.user=user.id;
+        next(); // call the next middleware or route handler allowing the request to proceed
+    })
+
+}
 const formatData= (users) => {
     const accessToken=jwt.sign({
         id:users._id,
 
     },process.env.JWT_SECRETKEY)
+    // here we are creating a access token for the user
+    // this token will be used to authenticate the user in the future requests
+    // we are using the user's id to create the token or The payload is an object containing data you want to encode in the token.
+    // this token will be sent to the client and the client will use this token to authenticate
+    // the secret key is stored in the .env file which is used to sign or create  the token 
+
+
     console.log(users);
     return {
         success: true,
@@ -276,7 +305,6 @@ const generateUploadURl=async(blobName,dataStream)=>{
 
 }
 
-
 server.post("/api/upload-url", async (req, res) => {
   try {
     const header = req.headers;
@@ -308,11 +336,74 @@ server.post('/api/upload-file',async(req,res)=>{
     }
    
 })
+server.post('/api/create-blog',verifyJWT,(req,res)=>{
+    let authorid=req.user;
+    let {title,content,tags,banner,des,draft}=req.body;
+    if(!title.length){
+        return res.status(403).json({"error":"Title is required"});
 
+    }
+    if(!des.length&&des.length>200){
+        return res.status(403).json({"error":"Description is required and must be less than 200 characters"});
 
+    }
+    if(!banner.length){
+        return res.status(403).json({"error":"Banner is required"});
 
+    }
+    if(!tags.length||tags.length>10){
+        return res.status(403).json({"error":"Tags are required and must be less than 10 tags"});
 
+    }
+    if(!content.blocks.length){
+        return res.status(403).json({"error":"There must be some content in the blog"});
+    }
+    tags=tags.map(tag=>tag.toLowerCase());
+    let blog_id=title.replace(/[^a-zA-Z0-9]/g,' ').replace(/\s+/g,"-").trim()+nanoid();
+  
+    let blog = new Blog({
+        title,
+        banner,
+        des,
+        content,
+        tags,
+        author: authorid,
+        blog_id,
+        draft: Boolean(draft),
 
+     
+})
+    blog.save().then(blog=>{
+        let incrementValue=draft?0:1;
+        User.findOneAndUpdate({"_id":authorid},
+            {
+                $inc: {
+                    "account_info.total_posts": incrementValue,
+                },
+                $push: {
+                    "blogs": blog._id,
+                }
+            },
+        ).then((user)=>{
+            if(!user){
+                return res.status(403).json({"error":"User not found"});
+            }
+            return res.status(200).json({
+                success:true,
+                blog_id:blog.blog_id,
+                message:"Blog created successfully",
+                blog:blog,
+                Users:user
+            })
+        }).catch((err)=>{
+            console.log(err);
+            return res.status(500).json({"error":"Internal server error"});
+        }   )
+    }).catch(err=>{
+        return res.status(500).json({"error":err.message})
+    })
+}
+)
 
 
 server.listen(port, () => {
