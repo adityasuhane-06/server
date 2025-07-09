@@ -428,6 +428,38 @@ server.get('/api/latest-blogs',(req,res)=>{
 });
 })
 
+server.post('/api/search-blogs', (req, res) => {
+    let {query}=req.body;
+    if(!query.length){
+        return res.status(403).json({"error":"Query is required"});
+    }
+    let regex = new RegExp(query, 'i'); // 'i' for case-insensitive search
+    Blog.find({
+        $or: [
+            { title: regex },
+            { des: regex },
+            { tags: regex }
+        ],
+        draft: false
+    })
+    .populate('author', "personal_info.fullname personal_info.profile_img personal_info.userName-_id")
+    .select("blog_id title des banner activity tags publishedAt").limit(5).sort({activity:-1}).then((blogs) => {
+        if (blogs.length === 0) {
+            return res.status(404).json({ success: false, message: "No blogs found" });
+        }
+        return res.status(200).json({
+            success: true,
+            blogs: blogs,
+        });
+    })
+    .catch((err) => {
+        console.log(err);
+        return res.status(500).json({ error: "Internal server error" });
+    }   
+);
+});
+
+
 server.get('/api/trending-blogs', (req, res) => {
     let maxBlogs = 5;
     Blog.find({ draft: false })
