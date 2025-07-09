@@ -430,6 +430,7 @@ server.get('/api/latest-blogs',(req,res)=>{
 
 server.post('/api/search-blogs', (req, res) => {
     let {query}=req.body;
+  
     if(!query.length){
         return res.status(403).json({"error":"Query is required"});
     }
