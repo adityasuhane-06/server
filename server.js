@@ -14,6 +14,7 @@ import { BlobServiceClient } from "@azure/storage-blob";
 
 dotenv.config();
 const  server =express();
+
 server.use(express.json());
 server.use(cors());
 let port = process.env.PORT || 3000;
@@ -59,7 +60,7 @@ const generateUserName=async(email)=>{
 const verifyJWT = (req, res, next) => {
     // next this will be called if the token is valid then only the user can access the protected route
     const authHeader = req.headers['authorization'];
-    console.log(authHeader)
+    
     const token  =authHeader&&authHeader.split(" ")[1];
     console.log(token)
     if(token===null||token===undefined){
@@ -74,6 +75,7 @@ const verifyJWT = (req, res, next) => {
             return res.status(403).json({error:"Invalid access token"});
         }
         req.user=user.id;
+        console.log("calling next middleware");
         next(); // call the next middleware or route handler allowing the request to proceed
     })
 
@@ -338,6 +340,7 @@ server.post('/api/upload-file',async(req,res)=>{
 })
 server.post('/api/create-blog',verifyJWT,(req,res)=>{
     let authorid=req.user;
+    console.log("author id",authorid);
     let {title,content,tags,banner,des,draft}=req.body;
     if(!title.length){
         return res.status(403).json({"error":"Title is required"});
@@ -373,8 +376,12 @@ server.post('/api/create-blog',verifyJWT,(req,res)=>{
 
      
 })
+    console.log("blog",blog);
     blog.save().then(blog=>{
         let incrementValue=draft?0:1;
+        if (!mongoose.Types.ObjectId.isValid(authorid)) {
+  return res.status(400).json({ error: "Invalid author ID" });
+}
         User.findOneAndUpdate({"_id":authorid},
             {
                 $inc: {
@@ -393,11 +400,11 @@ server.post('/api/create-blog',verifyJWT,(req,res)=>{
                 blog_id:blog.blog_id,
                 message:"Blog created successfully",
                 blog:blog,
-                Users:user
+                
             })
         }).catch((err)=>{
             console.log(err);
-            return res.status(500).json({"error":"Internal server error"});
+            return res.status(500).json({"error":"Internal server error of data ",err});
         }   )
     }).catch(err=>{
         return res.status(500).json({"error":err.message})
@@ -405,6 +412,40 @@ server.post('/api/create-blog',verifyJWT,(req,res)=>{
 }
 )
 
+
+server.get('/api/latest-blogs',(req,res)=>{
+    let maxBlogs=5;
+    Blog.find({draft:false})
+    .populate('author',"personal_info.fullname personal_info.profile_img personal_info.userName-_id").sort({publishedAt:-1}).select("blog_id title des banner activity tags publishedAt").limit(maxBlogs).then((blogs)=>{
+        return res.status(200).json({
+            success:true,
+            blogs:blogs,
+        
+
+})
+    }).catch((err)=>{
+        console.log(err);
+});
+})
+
+server.get('/api/trending-blogs', (req, res) => {
+    let maxBlogs = 5;
+    Blog.find({ draft: false })
+        .populate('author', "personal_info.fullname personal_info.profile_img personal_info.userName-_id")
+        .sort({ activity: -1 })
+        .select("blog_id title des banner activity tags publishedAt")
+        .limit(maxBlogs)
+        .then((blogs) => {
+            return res.status(200).json({
+                success: true,
+                blogs: blogs,
+            });
+        })
+        .catch((err) => {
+            console.log(err);
+            return res.status(500).json({ error: "Internal server error" });
+        });
+});
 
 server.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);
