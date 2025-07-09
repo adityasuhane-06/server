@@ -445,12 +445,10 @@ server.post('/api/search-blogs', (req, res) => {
     })
     .populate('author', "personal_info.fullname personal_info.profile_img personal_info.userName-_id")
     .select("blog_id title des banner activity tags publishedAt").limit(5).sort({activity:-1}).then((blogs) => {
-        if (blogs.length === 0) {
-            return res.status(404).json({ success: false, message: "No blogs found" });
-        }
         return res.status(200).json({
             success: true,
             blogs: blogs,
+            messsage: blogs.length>0?"Blogs found successfully": "No blogs found",
         });
     })
     .catch((err) => {
