@@ -417,7 +417,7 @@ server.post("/api/all-latest-blogs", (req, res) => {
         .then((count) => {
             return res.status(200).json({
                 success: true,
-                totalBlogs: count,
+                totalDocs: count,
                 message: "Total blogs fetched successfully",
                 
             })
