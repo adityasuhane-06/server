@@ -413,10 +413,17 @@ server.post('/api/create-blog',verifyJWT,(req,res)=>{
 )
 
 
-server.get('/api/latest-blogs',(req,res)=>{
-    let maxBlogs=5;
-    Blog.find({draft:false})
-    .populate('author',"personal_info.fullname personal_info.profile_img personal_info.userName-_id").sort({publishedAt:-1}).select("blog_id title des banner activity tags publishedAt").limit(maxBlogs).then((blogs)=>{
+server.post('/api/latest-blogs',(req,res)=>{
+    let {page}=req.body;
+    
+    let maxLimit=5;
+    Blog.find({draft:false}) // find all blogs that are not drafts
+    .populate('author',"personal_info.fullname personal_info.profile_img personal_info.userName-_id") // populate the author field with the user's fullname, profile image, and username
+    .sort({publishedAt:-1}) // sort the blogs by publishedAt in descending order
+    .select("blog_id title des banner activity tags publishedAt") // select the fields to return
+    .skip((page-1)*maxLimit) // skip the blogs of previous pages
+    .limit(maxLimit)
+    .then((blogs)=>{
         return res.status(200).json({
             success:true,
             blogs:blogs,
