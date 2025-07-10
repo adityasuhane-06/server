@@ -412,9 +412,27 @@ server.post('/api/create-blog',verifyJWT,(req,res)=>{
 }
 )
 
+server.post("/api/all-latest-blogs", (req, res) => {
+    Blog.countDocuments({ draft: false })
+        .then((count) => {
+            return res.status(200).json({
+                success: true,
+                totalBlogs: count,
+                message: "Total blogs fetched successfully",
+                
+            })
+        })
+        .catch((err) => {
+            console.log(err);
+            return res.status(500).json({ error: "Internal server error" });
+        }
+    );
+});
+
 
 server.post('/api/latest-blogs',(req,res)=>{
     let {page}=req.body;
+    console.log("page",page);
     
     let maxLimit=5;
     Blog.find({draft:false}) // find all blogs that are not drafts
