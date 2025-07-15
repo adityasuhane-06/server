@@ -453,6 +453,41 @@ server.post('/api/latest-blogs',(req,res)=>{
 });
 })
 
+server.post('api/all-trending-blogs', (req, res) => {
+    Blog.countDocuments({ draft: false })
+        .then((count) => {
+            return res.status(200).json({
+                success: true,
+                totalDocs: count,
+                message: "Total trending blogs fetched successfully",
+            });
+        })
+        .catch((err) => {
+            console.log(err);
+            return res.status(500).json({ error: "Internal server error" });
+        });
+});
+server.post('/api/trending-blogs', (req, res) => {
+    let { page } = req.body;
+    console.log("page", page);
+    let maxBlogs = 5;
+    Blog.find({ draft: false })
+        .populate('author', "personal_info.fullname personal_info.profile_img personal_info.userName-_id")
+        .sort({ activity: -1 })
+        .select("blog_id title des banner activity tags publishedAt")
+        .limit(maxBlogs)
+        .skip((page - 1) * maxBlogs)
+        .then((blogs) => {
+            return res.status(200).json({
+                success: true,
+                blogs: blogs,
+            });
+        })
+        .catch((err) => {
+            console.log(err);
+            return res.status(500).json({ error: "Internal server error" });
+        });
+});
 server.post('/api/search-blogs', (req, res) => {
     let {query}=req.body;
   
@@ -484,24 +519,7 @@ server.post('/api/search-blogs', (req, res) => {
 });
 
 
-server.get('/api/trending-blogs', (req, res) => {
-    let maxBlogs = 5;
-    Blog.find({ draft: false })
-        .populate('author', "personal_info.fullname personal_info.profile_img personal_info.userName-_id")
-        .sort({ activity: -1 })
-        .select("blog_id title des banner activity tags publishedAt")
-        .limit(maxBlogs)
-        .then((blogs) => {
-            return res.status(200).json({
-                success: true,
-                blogs: blogs,
-            });
-        })
-        .catch((err) => {
-            console.log(err);
-            return res.status(500).json({ error: "Internal server error" });
-        });
-});
+
 
 server.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);
