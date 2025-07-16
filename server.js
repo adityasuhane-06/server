@@ -428,7 +428,33 @@ server.post("/api/all-latest-blogs", (req, res) => {
         }
     );
 });
+server.post("/api/search-blogs-count",(req,res)=>{
+    let {query}=req.body;
+    if(!query.length){
+        return res.status(403).json({"error":"Query is required"});
+    }
+    let regex = new RegExp(query, 'i'); // 'i' for case-insensitive search
+    Blog.countDocuments({
+        $or: [
+            { title: regex },
+            { des: regex },
+            { tags: regex }
+        ],
+        draft: false
+    })
+    .then((count) => {
+        return res.status(200).json({
+            success: true,
+            totalDocs: count,
+            message: "Total blogs found successfully",
+        });
+    })
+    .catch((err) => {
+        console.log(err);
+        return res.status(500).json({ error: "Internal server error" });
+    });
 
+})
 
 server.post('/api/latest-blogs',(req,res)=>{
     let {page}=req.body;
@@ -489,7 +515,8 @@ server.post('/api/trending-blogs', (req, res) => {
         });
 });
 server.post('/api/search-blogs', (req, res) => {
-    let {query}=req.body;
+    let {page,query}=req.body;
+    let maxBlogs = 5;
   
     if(!query.length){
         return res.status(403).json({"error":"Query is required"});
@@ -504,7 +531,11 @@ server.post('/api/search-blogs', (req, res) => {
         draft: false
     })
     .populate('author', "personal_info.fullname personal_info.profile_img personal_info.userName-_id")
-    .select("blog_id title des banner activity tags publishedAt").limit(5).sort({activity:-1}).then((blogs) => {
+    .select("blog_id title des banner activity tags publishedAt")
+    .limit(5)
+    .skip((page-1)*maxBlogs)
+    .sort({activity:-1})
+    .then((blogs) => {
         return res.status(200).json({
             success: blogs.length > 0? true : false,
             blogs: blogs,
