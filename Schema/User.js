@@ -71,6 +71,14 @@ const userSchema = mongoose.Schema({
             type: Number,
             default: 0
         },
+        total_likes: {
+            type: Number,
+            default: 0
+        },
+        total_followers: {
+            type: Number,
+            default: 0
+        },
     },
     google_auth: {
         type: Boolean,

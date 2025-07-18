@@ -430,6 +430,7 @@ server.post("/api/all-latest-blogs", (req, res) => {
 });
 server.post("/api/search-blogs-count",(req,res)=>{
     let {query}=req.body;
+    console.log("query",query);
     if(!query.length){
         return res.status(403).json({"error":"Query is required"});
     }
@@ -460,6 +461,11 @@ server.post('/api/latest-blogs',(req,res)=>{
     let {page}=req.body;
     console.log("page",page);
     
+    // Add validation for page parameter
+    if(!page || page < 1){
+        page = 1;
+    }
+    
     let maxLimit=5;
     Blog.find({draft:false}) // find all blogs that are not drafts
     .populate('author',"personal_info.fullname personal_info.profile_img personal_info.userName-_id") // populate the author field with the user's fullname, profile image, and username
@@ -471,12 +477,16 @@ server.post('/api/latest-blogs',(req,res)=>{
         return res.status(200).json({
             success:true,
             blogs:blogs,
-        
-
-})
+            currentPage: page,
+            totalReturned: blogs.length
+        });
     }).catch((err)=>{
         console.log(err);
-});
+        return res.status(500).json({
+            success: false,
+            error: "Internal server error"
+        });
+    });
 })
 
 server.post('api/all-trending-blogs', (req, res) => {
@@ -517,6 +527,7 @@ server.post('/api/trending-blogs', (req, res) => {
 server.post('/api/search-blogs', (req, res) => {
     let {page,query}=req.body;
     let maxBlogs = 5;
+
   
     if(!query.length){
         return res.status(403).json({"error":"Query is required"});
@@ -536,6 +547,7 @@ server.post('/api/search-blogs', (req, res) => {
     .skip((page-1)*maxBlogs)
     .sort({activity:-1})
     .then((blogs) => {
+        console.log(blogs)
         return res.status(200).json({
             success: blogs.length > 0? true : false,
             blogs: blogs,
@@ -549,6 +561,75 @@ server.post('/api/search-blogs', (req, res) => {
 );
 });
 
+
+server.post("/api/search-users",(req,res)=>{
+    let {query,page}=req.body;
+    console.log("query",query);
+    if(!query.length){
+        return res.status(403).json({"error":"Query is required"});
+    }
+    if(!page || page < 1){
+        page = 1;
+    }
+    let maxUsers=5;
+    let regex=new RegExp(query, 'i'); // 'i' for case-insensitive search
+    User.find({
+        $or: [
+            {"personal_info.userName": regex},
+            {"personal_info.fullname": regex},
+            {"personal_info.email": regex}
+        ]
+    })
+    .select("personal_info.fullname personal_info.userName personal_info.profile_img personal_info.bio account_info.total_posts account_info.total_reads account_info.total_likes account_info.total_followers social_links")
+    .skip((page-1)*maxUsers)
+    .limit(maxUsers)
+    .sort({"personal_info.fullname":1}) // sort by fullname in ascending order
+    .then((users)=>{
+        if(!users.length){
+            return res.status(200).json({
+                success:false,
+                message:"No users found",
+                users:[],
+           
+            });
+        }
+        return res.status(200).json({
+            success:true,
+            message:"Users found successfully",
+            users:users,
+
+        });
+    }).catch((err)=>{
+        console.log(err);
+        return res.status(500).json({error:"Internal server error"});
+    });
+});
+server.post("/api/search-users-count",(req,res)=>{
+    let {query}=req.body;
+    console.log("query",query);
+    if(!query.length){
+        return res.status(403).json({"error":"Query is required"});
+    }
+    let regex=new RegExp(query, 'i'); // 'i' for case-insensitive search
+    User.countDocuments({
+        $or: [
+            {"personal_info.userName": regex},
+            {"personal_info.fullname": regex},
+            {"personal_info.email": regex}
+        ]
+    })
+    .then((count) => {
+        return res.status(200).json({
+            success: true,
+            totalDocs: count,
+            message: "Total users found successfully",
+        });
+    })
+    .catch((err) => {
+        console.log(err);
+        return res.status(500).json({ error: "Internal server error" });
+    });
+});
 
 
 
