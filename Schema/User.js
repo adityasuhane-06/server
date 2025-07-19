@@ -60,7 +60,11 @@ const userSchema = mongoose.Schema({
         website: {
             type: String,
             default: "",
-        }
+        },
+        Linkdein: {
+            type: String,
+            default: "",
+        }   
     },
     account_info:{
         total_posts: {

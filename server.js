@@ -632,6 +632,30 @@ server.post("/api/search-users-count",(req,res)=>{
 });
 
 
+server.post('/api/user-profile',  (req, res) => {
+    let { id } = req.body ;
+    let userName = id;
+    console.log("userName", userName);
+
+    User.findOne({"personal_info.userName": userName})
+        
+        .select("-personal_info.password -google_auth -updatedAt -createdAt -blogs")
+        .then((user) => {
+            if (!user) {
+                return res.status(404).json({ error: "User not found" });
+            }
+            return res.status(200).json({
+                success: true,
+                user: user,
+            });
+        })
+        .catch((err) => {
+            console.log(err);
+            return res.status(500).json({ error: "Internal server error" });
+        });
+    });
+
+
 
 server.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);
