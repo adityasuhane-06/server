@@ -59,7 +59,9 @@ const generateUserName=async(email)=>{
 
 const verifyJWT = (req, res, next) => {
     // next this will be called if the token is valid then only the user can access the protected route
+    console.log("Verifying JWT token",req.headers);
     const authHeader = req.headers['authorization'];
+    
     
     const token  =authHeader&&authHeader.split(" ")[1];
     console.log(token)
@@ -654,6 +656,28 @@ server.post('/api/user-profile',  (req, res) => {
             return res.status(500).json({ error: "Internal server error" });
         });
     });
+
+server.post('/api/aboutme',verifyJWT, (req, res) => {
+
+    let userId = req.user;
+    console.log("userId", userId);
+    console.log("userId", userId);
+    User.findById(userId)
+        .select("-personal_info.password -google_auth -updatedAt -createdAt -blogs")
+        .then((user) => {
+            if (!user) {
+                return res.status(404).json({ error: "User not found" });
+            }
+            return res.status(200).json({
+                success: true,
+                user:user
+            });
+        })
+        .catch((err) => {
+            console.log(err);
+            return res.status(500).json({ error: "Internal server error" });
+        });
+})
 
 
 
