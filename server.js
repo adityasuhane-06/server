@@ -1,7 +1,7 @@
 import express from 'express';
 import bcrypt from "bcrypt"
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
+import dotenv, { populate } from 'dotenv';
 import User from './Schema/User.js';
 import Blog from './Schema/Blog.js';
 
@@ -11,6 +11,7 @@ import cors from 'cors';
 import admin from "firebase-admin";
 import { getAuth } from 'firebase-admin/auth';
 import { BlobServiceClient } from "@azure/storage-blob";
+import { error } from 'console';
 
 dotenv.config();
 const  server =express();
@@ -527,8 +528,9 @@ server.post('/api/trending-blogs', (req, res) => {
         });
 });
 server.post('/api/search-blogs', (req, res) => {
-    let {page,query}=req.body;
-    let maxBlogs = 5;
+    let {page,query,limit,eliminateId}=req.body;
+    let maxBlogs = limit || 5; // default limit to 5 if not provided
+    console.log(limit,eliminateId);
 
   
     if(!query.length){
@@ -541,15 +543,18 @@ server.post('/api/search-blogs', (req, res) => {
             { des: regex },
             { tags: regex }
         ],
-        draft: false
+        draft: false,
+        blog_id:{$ne:eliminateId}
+
+
     })
     .populate('author', "personal_info.fullname personal_info.profile_img personal_info.userName-_id")
     .select("blog_id title des banner activity tags publishedAt")
-    .limit(5)
+    .limit(maxBlogs)
     .skip((page-1)*maxBlogs)
     .sort({activity:-1})
     .then((blogs) => {
-        console.log(blogs)
+        
         return res.status(200).json({
             success: blogs.length > 0? true : false,
             blogs: blogs,
@@ -678,6 +683,39 @@ server.post('/api/aboutme',verifyJWT, (req, res) => {
             return res.status(500).json({ error: "Internal server error" });
         });
 })
+
+server.post('/api/blog-details', (req, res) => {
+    let { blog_id } = req.body;
+    console.log("blog_id", blog_id);
+    let incrementValue=1;
+    Blog.findOneAndUpdate({ blog_id: blog_id, draft: false },
+       { $inc:{"activity.total_reads":incrementValue}},
+       {new:true} // it will return new document 
+    )
+       .populate("author","personal_info.fullname personal_info.userName personal_info.profile_img")
+       .select("title des content banner activity publishedAt blog_id tags")
+       .then(blog=>{
+        console.log(blog);
+        User.findOneAndUpdate({"_id":blog.author._id},
+            {
+                $inc: {
+                    "account_info.total_reads": incrementValue,
+                },
+            },
+        )
+        .catch((err)=>{
+            console.log(err);
+            return res.status(500).json({"error":"Internal server error"});
+        })
+        return res.status(200).json({blog});
+       })
+       .catch(error=>{
+        console.error(error);
+        
+       })
+    
+}
+);
 
 
 
