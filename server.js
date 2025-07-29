@@ -344,7 +344,8 @@ server.post('/api/upload-file',async(req,res)=>{
 server.post('/api/create-blog',verifyJWT,(req,res)=>{
     let authorid=req.user;
     console.log("author id",authorid);
-    let {title,content,tags,banner,des,draft}=req.body;
+    let {title,content,tags,banner,des,draft,id}=req.body;
+    console.log(id ,"from body")
     if(!title.length){
         return res.status(403).json({"error":"Title is required"});
 
@@ -365,9 +366,40 @@ server.post('/api/create-blog',verifyJWT,(req,res)=>{
         return res.status(403).json({"error":"There must be some content in the blog"});
     }
     tags=tags.map(tag=>tag.toLowerCase());
-    let blog_id=title.replace(/[^a-zA-Z0-9]/g,' ').replace(/\s+/g,"-").trim()+nanoid();
-  
-    let blog = new Blog({
+    let blog_id=id||title.replace(/[^a-zA-Z0-9]/g,' ').replace(/\s+/g,"-").trim()+nanoid();
+    if(id){
+        Blog.findOneAndUpdate({"blog_id":id},
+            {
+                title,
+                banner,
+                des,
+                content,
+                tags,
+                author: authorid,
+                blog_id,
+                draft: Boolean(draft),
+            }
+        )
+        .then(blog=>{
+            if(!blog){
+                return res.status(403).json({"error":"Blog not found"});
+            }
+            return res.status(200).json({
+                success:true,
+                blog_id:blog.blog_id,
+                message:"Blog updated successfully",
+                blog:blog,
+            })
+        }
+        )
+        .catch(err=>{
+            console.log(err);
+            return res.status(500).json({"error":"Internal server error of data ",err});
+        })
+
+    }
+    else{
+            let blog = new Blog({
         title,
         banner,
         des,
@@ -379,7 +411,7 @@ server.post('/api/create-blog',verifyJWT,(req,res)=>{
 
      
 })
-    console.log("blog",blog);
+    
     blog.save().then(blog=>{
         let incrementValue=draft?0:1;
         if (!mongoose.Types.ObjectId.isValid(authorid)) {
@@ -413,7 +445,11 @@ server.post('/api/create-blog',verifyJWT,(req,res)=>{
         return res.status(500).json({"error":err.message})
     })
 }
-)
+    
+});
+
+
+
 
 server.post("/api/all-latest-blogs", (req, res) => {
     Blog.countDocuments({ draft: false })
@@ -682,12 +718,12 @@ server.post('/api/aboutme',verifyJWT, (req, res) => {
             console.log(err);
             return res.status(500).json({ error: "Internal server error" });
         });
-})
+}) 
 
 server.post('/api/blog-details', (req, res) => {
-    let { blog_id } = req.body;
+    let { blog_id,draft,mode } = req.body;
     console.log("blog_id", blog_id);
-    let incrementValue=1;
+    let incrementValue=mode!=='edit'?1:0;
     Blog.findOneAndUpdate({ blog_id: blog_id, draft: false },
        { $inc:{"activity.total_reads":incrementValue}},
        {new:true} // it will return new document 
@@ -707,6 +743,9 @@ server.post('/api/blog-details', (req, res) => {
             console.log(err);
             return res.status(500).json({"error":"Internal server error"});
         })
+        if(blog.draft && !draft){
+            return res.status(500).json({"error":"You are trying to access a draft blog that is not published yet"});
+        }
         return res.status(200).json({blog});
        })
        .catch(error=>{
