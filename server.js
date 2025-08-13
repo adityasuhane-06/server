@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import dotenv, { populate } from 'dotenv';
 import User from './Schema/User.js';
 import Blog from './Schema/Blog.js';
-
+import Notification from './Schema/Notification.js';
 import { nanoid } from 'nanoid';
 import jwt  from 'jsonwebtoken';
 import cors from 'cors';
@@ -12,6 +12,8 @@ import admin from "firebase-admin";
 import { getAuth } from 'firebase-admin/auth';
 import { BlobServiceClient } from "@azure/storage-blob";
 import { error } from 'console';
+import { type } from 'os';
+import { getImageUrlWithSAS } from './helper/getImagewithSAS.js';
 
 dotenv.config();
 const  server =express();
@@ -306,7 +308,9 @@ const generateUploadURl=async(blobName,dataStream)=>{
    
    const blobClient =containerClient.getBlockBlobClient(blobName);
    await blobClient.uploadStream(dataStream)
-   return blobClient.url;
+   const baseUrl=blobClient.url;
+   const sasToken = process.env.SAS_TOKEN;
+   return baseUrl + sasToken;
 
 }
 
@@ -467,6 +471,7 @@ server.post("/api/all-latest-blogs", (req, res) => {
         }
     );
 });
+
 server.post("/api/search-blogs-count",(req,res)=>{
     let {query}=req.body;
     console.log("query",query);
@@ -698,6 +703,8 @@ server.post('/api/user-profile',  (req, res) => {
         });
     });
 
+    
+
 server.post('/api/aboutme',verifyJWT, (req, res) => {
 
     let userId = req.user;
@@ -757,6 +764,183 @@ server.post('/api/blog-details', (req, res) => {
 );
 
 
+server.post('/api/like', verifyJWT, (req, res) => {
+    let authorid = req.user;
+    let { blog_id, isLiked } = req.body;
+    console.log("blog_id", blog_id);
+    console.log("authorid", authorid);
+    console.log("isLiked (was liked before):", isLiked);
+
+    // If isLiked is true, user was already liked and now unliking (-1)
+    // If isLiked is false, user is now liking (+1)
+    let incrementValue = isLiked ? -1 : 1;
+    
+    Blog.findOneAndUpdate(
+        { blog_id: blog_id },
+        {
+            $inc: {
+                "activity.total_likes": incrementValue,
+            }
+        },
+        { new: true } // Return updated document
+    )
+    .then(blog => {
+        if (!blog) {
+            return res.status(404).json({ error: "Blog not found" });
+        }
+
+        // Only create notification when liking (not unliking)
+        if (!isLiked) { // User is now liking
+            let like = new Notification({
+                type: "like",
+                blog: blog._id,
+                notification_for: blog.author,
+                user: authorid,
+            });
+            
+            like.save()
+                .then((notification) => {
+                    console.log("Notification saved:", notification);
+                })
+                .catch(err => {
+                    console.log("Notification error:", err);
+                    // Don't return error here as the like was successful
+                });
+        }
+
+        // Update user's total likes
+        User.findOneAndUpdate(
+            { "_id": authorid },
+            {
+                $inc: {
+                    "account_info.total_likes": incrementValue,
+                },
+            }
+        )
+        .then(user => {
+            if (!user) {
+                return res.status(404).json({ error: "User not found" });
+            }
+            return res.status(200).json({ 
+                success: true, 
+                total_likes: blog.activity.total_likes 
+            });
+        })
+        .catch(err => {
+            console.log(err);
+            return res.status(500).json({ error: "Internal server error" });
+        });
+    })
+    .catch(err => {
+        console.log(err);
+        return res.status(500).json({ error: "Internal server error" });
+    });
+});
+
+server.post('/api/isliked-by-user',verifyJWT,(req,res)=>{
+    let { blog_id } = req.body;
+    let userId = req.user;
+    console.log("blog_id", blog_id);
+    console.log("userId", userId);
+
+})
+
+
+server.post('/api/update-all-sas-tokens', async (req, res) => {
+    try {
+        let updatedCount = 0;
+        const sasToken = process.env.SAS_TOKEN;
+        
+        console.log('Starting complete SAS token update...');
+        console.log('New SAS token expires: August 2026');
+
+        // Update all blog banners
+        const blogs = await Blog.find({
+            banner: { $regex: /blogimages01\.blob\.core\.windows\.net/ }
+        });
+
+        console.log(`Found ${blogs.length} blogs with banners to update`);
+
+        for (let blog of blogs) {
+            const originalUrl = blog.banner;
+            const baseUrl = originalUrl.split('?')[0]; // Remove old SAS token
+            blog.banner = baseUrl + sasToken; // Add new SAS token
+            await blog.save();
+            updatedCount++;
+            console.log(`Updated blog ${blog.blog_id}`);
+        }
+
+        // Update all user profile images (if any are from blob storage)
+        const users = await User.find({
+            'personal_info.profile_img': { $regex: /blogimages01\.blob\.core\.windows\.net/ }
+        });
+
+        console.log(`Found ${users.length} users with profile images to update`);
+
+        for (let user of users) {
+            const originalUrl = user.personal_info.profile_img;
+            const baseUrl = originalUrl.split('?')[0];
+            user.personal_info.profile_img = baseUrl + sasToken;
+            await user.save();
+            updatedCount++;
+            console.log(`Updated user ${user.personal_info.userName}`);
+        }
+
+        // Update all content images
+        const blogsWithContent = await Blog.find({
+            'content.blocks': {
+                $elemMatch: {
+                    'type': 'image',
+                    'data.file.url': { $regex: /blogimages01\.blob\.core\.windows\.net/ }
+                }
+            }
+        });
+
+        console.log(`Found ${blogsWithContent.length} blogs with content images to update`);
+
+        for (let blog of blogsWithContent) {
+            let blogUpdated = false;
+            
+            if (blog.content && blog.content.blocks) {
+                blog.content.blocks.forEach(block => {
+                    if (block.type === 'image' && 
+                        block.data?.file?.url && 
+                        block.data.file.url.includes('blogimages01.blob.core.windows.net')) {
+                        
+                        const originalUrl = block.data.file.url;
+                        const baseUrl = originalUrl.split('?')[0];
+                        block.data.file.url = baseUrl + sasToken;
+                        blogUpdated = true;
+                    }
+                });
+            }
+
+            if (blogUpdated) {
+                await blog.save();
+                updatedCount++;
+                console.log(`Updated content images in blog ${blog.blog_id}`);
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Successfully updated ${updatedCount} records with new SAS token (expires August 2026)`,
+            details: {
+                blogsWithBanners: blogs.length,
+                usersWithImages: users.length,
+                blogsWithContentImages: blogsWithContent.length,
+                totalUpdated: updatedCount
+            }
+        });
+
+    } catch (error) {
+        console.error('Error updating SAS tokens:', error);
+        res.status(500).json({ 
+            error: 'Failed to update SAS tokens', 
+            details: error.message 
+        });
+    }
+});
 
 server.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);

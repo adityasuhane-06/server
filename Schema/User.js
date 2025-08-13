@@ -92,7 +92,12 @@ const userSchema = mongoose.Schema({
         type: [ Schema.Types.ObjectId ],
         ref: 'blogs',
         default: [],
-    }
+    },
+    bookmarks: {
+        type: [ Schema.Types.ObjectId ],
+        ref: 'blogs',
+        default: [],
+    },
 
 }, 
 { 
